@@ -1,20 +1,35 @@
-import json
 import requests
 from app.api.model import crud
 from functools import wraps
 
-def authenticate_to_gateway_api(session, edge_gateway):
+
+def post_pop_to_gateway_api(url, pop):
     auth_response = requests.post(
-        f"{edge_gateway.url}/auth", json={"pop": edge_gateway.proof_of_possession}, headers={"Content-Type": "application/json"}
+        url=f"{url}/auth",
+        json={"pop": pop},
+        headers={"Content-Type": "application/json"},
     )
     if auth_response.status_code != 200:
         raise Exception("Gateway authentication failed.")
-    
+
+    return auth_response.json()["jwt_token"]
+
+
+def authenticate_to_gateway_api(session, edge_gateway):
+    auth_response = requests.post(
+        url=f"{edge_gateway.url}/auth",
+        json={"pop": edge_gateway.proof_of_possession},
+        headers={"Content-Type": "application/json"},
+    )
+    if auth_response.status_code != 200:
+        raise Exception("Gateway authentication failed.")
+
     return crud.update_edge_gateway(
         uuid=edge_gateway.uuid,
         session=session,
         fields=auth_response.json(),
     )
+
 
 def jwt_token_refresh_decorator(api_call_function):
     @wraps(api_call_function)
@@ -30,22 +45,22 @@ def jwt_token_refresh_decorator(api_call_function):
                 f"Gateway API call failed. Status code: {response.status_code}"
             )
         return response.json()
+
     return wrapper
 
 
 @jwt_token_refresh_decorator
 def get_from_gateway_api(session, edge_gateway, endpoint):
-    response = requests.get(
+    return requests.get(
         url=f"{edge_gateway.url}{endpoint}",
         headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},
     )
-    return response
+
 
 @jwt_token_refresh_decorator
 def post_json_to_gateway_api(session, edge_gateway, endpoint, json_data=None):
-    response = requests.post(
+    return requests.post(
         url=f"{edge_gateway.url}{endpoint}",
         headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},
         json=json_data,
     )
-    return response

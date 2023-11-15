@@ -3,29 +3,21 @@ from pydantic import BaseModel
 from typing import List
 
 
-class BaseEdgeSensor(BaseModel):
-    """
-    Basic edge sensor schema.
-    """
-
+class BLEDeviceWithPoP(BaseModel):
     device_name: str
     device_address: str
+    device_pop: str
 
 
-class EdgeSensorIn(BaseEdgeSensor):
-    """
-    Schema for creating an edge sensor.
-    """
-
-    pass
-
-
-class EdgeSensorOut(BaseEdgeSensor):
+class EdgeSensor(BaseModel):
     """
     Schema for returning an edge sensor.
     """
 
+    device_name: str
+    device_address: str
     uuid: str
+    edgex_device_uuid: str
     registered_at: datetime
 
     class Config:
@@ -56,7 +48,7 @@ class EdgeGatewayOut(BaseEdgeGateway):
     device_address: str
     registered_at: datetime
 
-    edge_sensors: List[EdgeSensorOut] = []
+    edge_sensors: List[EdgeSensor] = []
 
     class Config:
         from_attributes = True
