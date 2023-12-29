@@ -67,6 +67,6 @@ class EdgeSensorMeasurements(BaseModel):
     device_name: str
     measurements: List[_EdgeSensorMeasurement]
 
+
 class EdgeSensorConfig(BaseModel):
-    ml_model: bool
-    
+    measurement_interval_ms: int

@@ -4,19 +4,16 @@ Routes for the api.
 13/11/2022
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from app.dependencies import get_session
-from app.api.model import schemas, crud, enums
+from app.api.model import schemas, crud
 from app.api import utils as api_utils
-from sqlalchemy.orm import Session
 import logging
-
-PAGE_SIZE = 8
 
 api_router = APIRouter(prefix="/api")
 
 
-@api_router.get("/get-edge-gateways")
+@api_router.get("/gateway")
 async def get_edge_gateways(
     session=Depends(get_session),
 ) -> list[schemas.EdgeGatewayOut]:
@@ -24,10 +21,10 @@ async def get_edge_gateways(
     Returns a list of JSON's with the last PAGE_SIZE edge gateways.
     """
 
-    return crud.read_edge_gateways(session=session, page_size=PAGE_SIZE)
+    return crud.read_edge_gateways(session=session)
 
 
-@api_router.get("/get-edge-gateway/{gateway_uuid}")
+@api_router.get("/gateway/{gateway_uuid}")
 async def get_edge_gateway(
     gateway_uuid: str, session=Depends(get_session)
 ) -> schemas.EdgeGatewayOut:
@@ -38,7 +35,7 @@ async def get_edge_gateway(
     return crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
 
 
-@api_router.post("/register_gateway")
+@api_router.post("/gateway/register")
 async def register_gateway(
     edge_gateway: schemas.EdgeGatewayIn, session=Depends(get_session)
 ):
@@ -54,9 +51,7 @@ async def register_gateway(
     )
 
     # ask the gateway for the rest of the data.
-    gateway_info = api_utils.get_from_gateway_api(
-        session, db_edge_gateway, "/get-gateway-info"
-    )
+    gateway_info = api_utils.get_from_gateway_api(session, db_edge_gateway, "/gateway")
     crud.update_edge_gateway(
         uuid=db_edge_gateway.uuid,
         session=session,
@@ -66,15 +61,15 @@ async def register_gateway(
     return {"message": "Gateway registered successfully!"}
 
 
-@api_router.get("/gateway/{gateway_uuid}/discover-devices")
+@api_router.get("/gateway/{gateway_uuid}/devices/discover")
 async def discover_devices(gateway_uuid: str, session=Depends(get_session)):
     edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
     if edge_gateway is None:
         raise HTTPException(status_code=404, detail="Edge gateway not found")
-    return api_utils.get_from_gateway_api(session, edge_gateway, "/discover-devices")
+    return api_utils.get_from_gateway_api(session, edge_gateway, "/devices/discover")
 
 
-@api_router.post("/gateway/{gateway_uuid}/bind-devices")
+@api_router.post("/gateway/{gateway_uuid}/devices/bind")
 async def bind_edge_sensors(
     gateway_uuid: str,
     edge_sensors: list[schemas.BLEDeviceWithPoP],
@@ -118,7 +113,7 @@ async def bind_edge_sensors(
     ble_prov_response = api_utils.post_json_to_gateway_api(
         session=session,
         edge_gateway=edge_gateway,
-        endpoint="/provision-devices",
+        endpoint="/devices/provision",
         json_data=json_data,
     )
     provisioned = ble_prov_response["provisioned"]
@@ -138,31 +133,137 @@ async def bind_edge_sensors(
     }
 
 
-@api_router.post("/mqtt-connection-status")
-async def mqtt_device_connected(
-    payload: schemas.MQTTConnectionStatus,
+@api_router.post("/gateway/{gateway_uuid}/devices/predictive-model")
+async def devices_predictive_model(
+    gateway_uuid, predictive_model: UploadFile = File(...), session=Depends(get_session)
+):
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+
+    devices = [dev.device_name for dev in edge_gateway.edge_sensors]
+
+    api_utils.post_file_to_gateway_api(
+        session=session,
+        endpoint="/devices/predictive-model",
+        edge_gateway=edge_gateway,
+        file={"predictive_model": predictive_model.file},
+        form_data={"devices": devices},
+    )
+    return {"message": "Predictive model uploaded successfully!"}
+
+
+@api_router.post("/gateway/{gateway_uuid}/devices/config")
+async def config_devices(
+    gateway_uuid,
+    config: schemas.EdgeSensorConfig,
     session=Depends(get_session),
 ):
-    edge_sensor = crud.read_edge_sensor_by_device_name(
-        session=session, device_name=payload.device_name
-    )
-    if edge_sensor is None:
-        raise HTTPException(status_code=404, detail="Edge sensor not found")
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
 
-    operating_state = (
-        enums.EdgeSensorOperatingState.UP
-        if payload.mqtt_connection_status
-        else enums.EdgeSensorOperatingState.DOWN
-    )
-    crud.update_edge_sensor_by_uuid(
+    devices = [dev.device_name for dev in edge_gateway.edge_sensors]
+
+    api_utils.post_json_to_gateway_api(
         session=session,
-        uuid=edge_sensor.uuid,
-        fields={"operating_state": operating_state},
+        endpoint="/devices/config",
+        edge_gateway=edge_gateway,
+        json_data={
+            "devices": devices,
+            "params": config.model_dump()
+        },
     )
-    return {"message": "MQTT connection status updated successfully!"}
+    return {"message": "Devices configured successfully!"}
 
 
-@api_router.post("/edge-sensor-measurement")
+@api_router.post("/gateway/{gateway_uuid}/devices/ready")
+async def ready_devices(gateway_uuid, session=Depends(get_session)):
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+
+    devices = [device.device_name for device in edge_gateway.edge_sensors]
+
+    api_utils.post_form_data_to_gateway_api(
+        session=session,
+        endpoint="/devices/ready",
+        edge_gateway=edge_gateway,
+        form_data={"devices": devices},
+    )
+
+    return {"message": "Devices ready successfully!"}
+
+@api_router.post("/gateway/{gateway_uuid}/devices/start")
+async def start_devices(gateway_uuid, session=Depends(get_session)):
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+
+    devices = [device.device_name for device in edge_gateway.edge_sensors]
+
+    api_utils.post_form_data_to_gateway_api(
+        session=session,
+        endpoint="/devices/start",
+        edge_gateway=edge_gateway,
+        form_data={"devices": devices},
+    )
+
+    # update working state to True for all devices.
+    for device in devices:
+        crud.update_edge_sensor_by_device_name(
+            session=session,
+            device_name=device["device_name"],
+            fields={"working_state": True},
+        )
+
+    return {"message": "Devices started successfully!"}
+
+
+@api_router.post("/gateway/{gateway_uuid}/devices/stop")
+async def stop_devices(gateway_uuid, session=Depends(get_session)):
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+
+    devices = [device.device_name for device in edge_gateway.edge_sensors]
+
+    api_utils.post_form_data_to_gateway_api(
+        session=session,
+        endpoint="/devices/stop",
+        edge_gateway=edge_gateway,
+        form_data={"devices": devices},
+    )
+
+    # update working state to False for all devices.
+    for device in devices:
+        crud.update_edge_sensor_by_device_name(
+            session=session,
+            device_name=device["device_name"],
+            fields={"working_state": False},
+        )
+
+    return {"message": "Devices stopped successfully!"}
+
+
+@api_router.post("/gateway/{gateway_uuid}/devices/reset")
+async def reset_devices(gateway_uuid, session=Depends(get_session)):
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+
+    devices = [dev.device_name for dev in edge_gateway.edge_sensors]
+
+    api_utils.post_form_data_to_gateway_api(
+        session=session,
+        endpoint="/devices/reset",
+        edge_gateway=edge_gateway,
+        form_data={"devices": devices},
+    )
+    return {"message": "Devices reset successfully!"}
+
+
+@api_router.post("/export/measurement")
 async def edge_sensor_measurement(
     device_data: schemas.EdgeSensorMeasurements, session=Depends(get_session)
 ):
@@ -174,121 +275,3 @@ async def edge_sensor_measurement(
     )
     if edge_sensor is None:
         raise HTTPException(status_code=404, detail="Edge sensor not found")
-
-
-@api_router.post("/{gateway_uuid}/lock-devices")
-async def lock_devices(gateway_uuid: str, session=Depends(get_session)):
-    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
-    if edge_gateway is None:
-        raise HTTPException(status_code=404, detail="Edge gateway not found")
-
-    devices = [
-        {
-            "device_name": device.device_name,
-            "edgex_device_uuid": str(device.edgex_device_uuid),
-        }
-        for device in edge_gateway.edge_sensors
-    ]
-
-    api_utils.post_json_to_gateway_api(
-        session=session,
-        json_data=devices,
-        endpoint="/lock-devices",
-        edge_gateway=edge_gateway,
-    )
-    return {"message": "Devices locked successfully!"}
-
-
-@api_router.post("/{gateway_uuid}/unlock-devices")
-async def unlock_devices(gateway_uuid: str, session=Depends(get_session)):
-    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
-    if edge_gateway is None:
-        raise HTTPException(status_code=404, detail="Edge gateway not found")
-
-    devices = [
-        {
-            "device_name": device.device_name,
-            "edgex_device_uuid": str(device.edgex_device_uuid),
-        }
-        for device in edge_gateway.edge_sensors
-    ]
-
-    api_utils.post_json_to_gateway_api(
-        session=session,
-        json_data=devices,
-        endpoint="/unlock-devices",
-        edge_gateway=edge_gateway,
-    )
-    return {"message": "Devices unlocked successfully!"}
-
-
-@api_router.post("/{gateway_uuid}/start-devices")
-async def start_devices(gateway_uuid, session=Depends(get_session)):
-    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
-    if edge_gateway is None:
-        raise HTTPException(status_code=404, detail="Edge gateway not found")
-
-    devices = [
-        {
-            "device_name": device.device_name,
-            "device_address": device.device_address,
-            "edgex_device_uuid": str(device.edgex_device_uuid),
-        }
-        for device in edge_gateway.edge_sensors
-    ]
-
-    api_utils.post_json_to_gateway_api(
-        session=session,
-        json_data=devices,
-        endpoint="/start-devices",
-        edge_gateway=edge_gateway,
-    )
-    return {"message": "Devices started successfully!"}
-
-
-@api_router.post("/{gateway_uuid}/stop-devices")
-async def stop_devices(gateway_uuid, session=Depends(get_session)):
-    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
-    if edge_gateway is None:
-        raise HTTPException(status_code=404, detail="Edge gateway not found")
-
-    devices = [
-        {
-            "device_name": device.device_name,
-            "edgex_device_uuid": str(device.edgex_device_uuid),
-        }
-        for device in edge_gateway.edge_sensors
-    ]
-
-    api_utils.post_json_to_gateway_api(
-        session=session,
-        json_data=devices,
-        endpoint="/stop-devices",
-        edge_gateway=edge_gateway,
-    )
-    return {"message": "Devices stopped successfully!"}
-
-
-@api_router.post("/{gateway_uuid}/config-devices")
-async def config_devices(
-    gateway_uuid, config: schemas.EdgeSensorConfig, session=Depends(get_session)
-):
-    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
-    if edge_gateway is None:
-        raise HTTPException(status_code=404, detail="Edge gateway not found")
-
-    devices = [
-        {
-            "device_name": device.device_name,
-            "edgex_device_uuid": str(device.edgex_device_uuid),
-        }
-        for device in edge_gateway.edge_sensors
-    ]
-
-    api_utils.post_json_to_gateway_api(
-        session=session,
-        json_data={"devices": devices, "config": config.model_dump()},
-        endpoint="/config-devices",
-        edge_gateway=edge_gateway,
-    )
-    return {"message": "Devices configured successfully!"}

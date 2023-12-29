@@ -1,4 +1,5 @@
 from app.api.routes import api_router
+from app.api.routes import api_router
 from fastapi import FastAPI
 from app.config import SECRET_KEY, ORIGINS
 from app.database import Base, engine

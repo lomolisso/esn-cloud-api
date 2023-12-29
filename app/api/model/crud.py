@@ -4,8 +4,8 @@ from sqlalchemy import select, update
 
 # --- Crud utils for EdgeGateway ---
 
-def read_edge_gateways(session: Session, page=0, page_size=10) -> list[models.EdgeGateway]:
-    query = select(models.EdgeGateway).offset(page).limit(page_size)
+def read_edge_gateways(session: Session) -> list[models.EdgeGateway]:
+    query = select(models.EdgeGateway)
     result = session.execute(query)
     return result.scalars().all()
 
