@@ -76,7 +76,7 @@ def post_json_to_gateway_api(session, edge_gateway, endpoint, json_data=None):
     )
 
 @jwt_token_refresh_decorator
-def post_file_to_gateway_api(session, edge_gateway, endpoint, file, form_data):
+def post_file_to_gateway_api(session, edge_gateway, endpoint, file, form_data=None):
     return requests.post(
         url=f"{edge_gateway.url}{endpoint}",
         headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},

@@ -102,7 +102,7 @@ async def bind_edge_sensors(
     edgex_response = api_utils.post_json_to_gateway_api(
         session=session,
         edge_gateway=edge_gateway,
-        endpoint="/upload-edgex-devices",
+        endpoint="/devices/upload-edgex",
         json_data=json_data,
     )
     logging.info(
@@ -131,6 +131,22 @@ async def bind_edge_sensors(
         "message": "Edge sensor added to the gateway successfully!",
         "provisioned": provisioned,
     }
+
+@api_router.post("/gateway/{gateway_uuid}/predictive-model")
+async def gateway_predictive_model(
+    gateway_uuid, predictive_model: UploadFile = File(...), session=Depends(get_session)
+):
+    edge_gateway = crud.read_edge_gateway_by_uuid(session=session, uuid=gateway_uuid)
+    if edge_gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+
+    api_utils.post_file_to_gateway_api(
+        session=session,
+        endpoint="/gateway/predictive-model",
+        edge_gateway=edge_gateway,
+        file={"predictive_model": predictive_model.file},
+    )
+    return {"message": "Predictive model uploaded successfully!"}
 
 
 @api_router.post("/gateway/{gateway_uuid}/devices/predictive-model")
@@ -169,10 +185,7 @@ async def config_devices(
         session=session,
         endpoint="/devices/config",
         edge_gateway=edge_gateway,
-        json_data={
-            "devices": devices,
-            "params": config.model_dump()
-        },
+        json_data={"devices": devices, "params": config.model_dump()},
     )
     return {"message": "Devices configured successfully!"}
 
@@ -193,6 +206,7 @@ async def ready_devices(gateway_uuid, session=Depends(get_session)):
     )
 
     return {"message": "Devices ready successfully!"}
+
 
 @api_router.post("/gateway/{gateway_uuid}/devices/start")
 async def start_devices(gateway_uuid, session=Depends(get_session)):
@@ -263,15 +277,18 @@ async def reset_devices(gateway_uuid, session=Depends(get_session)):
     return {"message": "Devices reset successfully!"}
 
 
-@api_router.post("/export/measurement")
+@api_router.post("/gateway/{gateway_name}/device/{device_name}/export")
 async def edge_sensor_measurement(
-    device_data: schemas.EdgeSensorMeasurements, session=Depends(get_session)
+    gateway_name: str,
+    device_name: str,
+    device_data: schemas.EdgeSensorMeasurements,
+    session=Depends(get_session),
 ):
     """
     Receives a measurement from an edge sensor.
     """
     edge_sensor = crud.read_edge_sensor_by_device_name(
-        session=session, device_name=device_data.device_name
+        session=session, device_name=device_name
     )
     if edge_sensor is None:
         raise HTTPException(status_code=404, detail="Edge sensor not found")
