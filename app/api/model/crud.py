@@ -16,6 +16,13 @@ def read_edge_gateway_by_uuid(session: Session, uuid) -> models.EdgeGateway:
     result = session.execute(query)
     return result.scalars().first()
 
+def read_edge_gateway_by_device_name(session: Session, device_name) -> models.EdgeGateway:
+    query = select(models.EdgeGateway).where(
+        models.EdgeGateway.device_name == device_name
+    )
+    result = session.execute(query)
+    return result.scalars().first()
+
 def create_edge_gateway(session: Session, fields: dict) -> models.EdgeGateway:
     db_instance = models.EdgeGateway(**fields)
     session.add(db_instance)
@@ -81,3 +88,11 @@ def update_edge_sensor_by_device_name(session: Session, device_name: str, fields
     session.execute(query)
     session.commit()
     return read_edge_sensor_by_device_name(session=session, device_name=device_name)
+
+# --- Crud utils for EdgeSensorPredictionLog ---
+def create_edge_sensor_prediction_log(session: Session, edge_sensor_uuid: str, fields: dict) -> models.EdgeSensorPredictionLog:
+    db_instance = models.EdgeSensorPredictionLog(edge_sensor_uuid=edge_sensor_uuid, **fields)
+    session.add(db_instance)
+    session.commit()
+    session.refresh(db_instance)
+    return db_instance

@@ -2,7 +2,7 @@ import uuid
 import app.utils as utils
 
 from app.database import Base
-from sqlalchemy import Boolean, ForeignKey, Column
+from sqlalchemy import Boolean, Float, ForeignKey, Column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import Integer, String, DateTime, Text, Enum
 from sqlalchemy.dialects.postgresql import UUID
@@ -18,7 +18,6 @@ class EdgeGateway(Base):
     proof_of_possession = Column(String(1000), nullable=False, unique=True)
     registered_at = Column(DateTime, default=utils.tz_now)    
     edge_sensors = relationship("EdgeSensor", backref="edge_gateway")
-    #dataset = Column(Integer, ForeignKey("predictive_model_table.id"))
 
 
 class EdgeSensor(Base):
@@ -29,6 +28,22 @@ class EdgeSensor(Base):
     working_state = Column(Boolean, nullable=False, default=False)
     device_name = Column(String(50), nullable=False, unique=True)
     device_address = Column(String(50), nullable=False, unique=True)
-    registered_at = Column(DateTime, default=utils.tz_now)    
+    registered_at = Column(DateTime, default=utils.tz_now)
+
     gateway_uuid = Column(UUID(as_uuid=True), ForeignKey("edge_gateway_table.uuid"))
+    edge_sensor_prediction_logs = relationship("EdgeSensorPredictionLog", backref="edge_sensor")
+
+class EdgeSensorPredictionLog(Base):
+    __tablename__ = "edge_sensor_prediction_log_table"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_name = Column(String(50), nullable=False)
+    pred_source_layer = Column(String(50), nullable=False)
+    #request_timestamp = Column(String(50), nullable=False)
+    #response_timestamp = Column(String(50), nullable=False)
+    pred_latency = Column(Integer, nullable=False)
+    measurement = Column(Float, nullable=False)
+    prediction = Column(Float, nullable=False)
+
+    edge_sensor_uuid = Column(UUID(as_uuid=True), ForeignKey("edge_sensor_table.uuid"))
 

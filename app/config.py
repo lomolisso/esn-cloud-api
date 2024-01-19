@@ -13,6 +13,7 @@ SECRET_KEY: str = os.environ.get("SECRET_KEY")
 
 APP_FRONTEND_URL = os.environ.get("APP_FRONTEND_URL")
 APP_BACKEND_OP_URL = os.environ.get("APP_BACKEND_URL")
+ESN_PRED_NODE_URL = os.environ.get("ESN_PRED_NODE_URL")
 
 TIMEZONE = os.environ.get("TIMEZONE", "Chile/Continental")
 

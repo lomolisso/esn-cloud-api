@@ -1,7 +1,8 @@
+from typing import Union
 import requests
-import json
 from app.api.model import crud
 from functools import wraps
+from app.config import ESN_PRED_NODE_URL
 
 
 def post_pop_to_gateway_api(url, pop):
@@ -93,3 +94,30 @@ def post_command_to_gateway_api(session, edge_gateway, endpoint, command):
         endpoint=endpoint,
         json_data={"command": command},
     )
+
+
+async def update_cloud_predictive_model(model_payload):
+    response = requests.post(
+        url=f"{ESN_PRED_NODE_URL}/predictive-model",
+        json=model_payload,
+    )
+    
+    if response.status_code != 202:
+        raise Exception(
+            f"Failed to upload predictive model to the cloud predictive node. Status code: {response.status_code}"
+        )
+    
+    return response.json()
+
+def post_json_to_predictive_node(endpoint: str, json_data: Union[dict, list]):
+    # Sends a POST request to the predictive node
+    response = requests.post(
+        url=f"{ESN_PRED_NODE_URL}{endpoint}",
+        json=json_data,
+    )
+    if response.status_code != 200:
+        raise Exception(f"API call failed. Status code: {response.status_code}")
+    return response.json()
+
+def check_prediction(measurement, prediction, **kwargs):
+    pass
