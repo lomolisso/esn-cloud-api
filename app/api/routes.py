@@ -4,7 +4,7 @@ Routes for the api.
 13/11/2022
 """
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, BackgroundTasks
 from app.dependencies import get_session
 from app.api.model import schemas, crud
 from app.api import utils as api_utils
@@ -15,7 +15,6 @@ api_router = APIRouter(prefix="/api")
 
 
 # --- Cloud routes ---
-
 
 @api_router.post("/cloud/predictive-model")
 async def cloud_predictive_model(
@@ -35,6 +34,26 @@ async def cloud_predictive_model(
         },
     )
 
+@api_router.post("/gateway/{gateway_name}/device/{device_name}/debug/prediction-command")
+async def cloud_prediction_command(gateway_name: str, device_name: str, payload: schemas.PredictionCommand, background_tasks: BackgroundTasks, session=Depends(get_session)):
+    gateway = crud.read_edge_gateway_by_device_name(session=session, device_name=gateway_name)
+    if gateway is None:
+        raise HTTPException(status_code=404, detail="Edge gateway not found")
+    
+    edge_sensor = crud.read_edge_sensor_by_device_name(session=session, device_name=device_name)
+    if edge_sensor is None:
+        raise HTTPException(status_code=404, detail="Edge sensor not found")
+    
+    if str(edge_sensor.gateway_uuid) != str(gateway.uuid):
+        raise HTTPException(status_code=409, detail="Edge sensor not registered to the gateway")
+    
+    # send a debug-prediction-command to the device.
+    background_tasks.add_task(api_utils.post_json_to_gateway_api,
+        session=session,
+        endpoint=f"/devices/{device_name}/prediction-command",
+        edge_gateway=gateway,
+        json_data=payload.model_dump(),
+    )
 
 # --- Gateway routes ---
 
@@ -312,6 +331,7 @@ async def cloud_prediction_request(
     gateway_name: str,
     device_name: str,
     pred_request: schemas.EdgeSensorPredictionRequest,
+    background_tasks: BackgroundTasks,
     session=Depends(get_session),
 ):
     """
@@ -332,28 +352,17 @@ async def cloud_prediction_request(
     
     if str(edge_sensor.gateway_uuid) != str(gateway.uuid):
         raise HTTPException(status_code=409, detail="Edge sensor not registered to the gateway")
-
-    # TODO: enqueue task using celery
-    node_output = api_utils.post_json_to_predictive_node(
+    
+    background_tasks.add_task(
+        api_utils.post_json_to_predictive_node,
         endpoint="/predict",
         json_data={
-            "measurement": pred_request.measurement
-        },
+            "device_name": device_name,
+            "gateway_name": gateway_name,
+            **pred_request.model_dump(),
+        }
     )
-    api_utils.check_prediction(**node_output)
-
-    # send a debug-prediction-command to the device.
-    if pred_request.debug_mode:
-        api_utils.post_json_to_gateway_api(
-            session=session,
-            endpoint=f"/devices/{device_name}/prediction-command",
-            edge_gateway=gateway,
-            json_data={
-                "prediction_source_layer": "cloud",
-                "request_timestamp": pred_request.request_timestamp,
-                **node_output,
-            }
-        )
+    
 
 
 @api_router.post("/gateway/{gateway_name}/device/{device_name}/export")
@@ -429,4 +438,3 @@ async def edge_sensor_prediction_log(
         edge_sensor_uuid=edge_sensor.uuid,
         fields=_fields
     )
-    
