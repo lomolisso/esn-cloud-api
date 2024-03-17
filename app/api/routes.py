@@ -424,13 +424,16 @@ async def edge_sensor_prediction_log(
         raise HTTPException(status_code=409, detail="Edge sensor not registered to the gateway")
     
     # create the prediction log.
-    pred_latency = int(device_data.response_timestamp) - int(device_data.request_timestamp)
+    print("Source layer: ", device_data.pred_source_layer)
+    print("Measurement: ", device_data.measurement)
+    print("Prediction: ", device_data.prediction)
+    pred_latency = (int(device_data.response_timestamp) - int(device_data.request_timestamp)) / 1000 # in miliseconds
     _fields = {
         "pred_latency": pred_latency,
         "device_name": device_name,
         "pred_source_layer": device_data.pred_source_layer,
-        "measurement": device_data.measurement,
-        "prediction": device_data.prediction,
+        "measurement": float(device_data.measurement),
+        "prediction": float(device_data.prediction),
     }
 
     crud.create_edge_sensor_prediction_log(

@@ -60,7 +60,6 @@ class MQTTConnectionStatus(BaseModel):
 
 
 class EdgeSensorExportData(BaseModel):
-    gateway_name: str
     measurement: float
 
 class EdgeSensorPredictionRequest(BaseModel):
@@ -79,8 +78,8 @@ class EdgeSensorPredictionLog(BaseModel):
     pred_source_layer: str
     request_timestamp: str
     response_timestamp: str
-    measurement: float
-    prediction: float
+    measurement: str
+    prediction: str
 
 
 class EdgeSensorConfig(BaseModel):
