@@ -1,123 +1,413 @@
-from typing import Union
-import requests
-from app.api.model import crud
-from functools import wraps
-from app.config import ESN_PRED_NODE_URL
+from app.core.config import (
+    DATA_MICROSERVICE_URL,
+    COMMAND_MICROSERVICE_URL,
+    INFERENCE_MICROSERVICE_URL,
+    GATEWAY_INFERENCE_LAYER,
+    HEURISTIC_ERROR_CODE,
+)
+from app.api.schemas.data_ms import data as data_schemas
+from app.api.schemas.command_ms import gateway_cmd as gw_cmd_schemas
+from app.api.schemas.command_ms import sensor_cmd as s_cmd_schemas
+from app.api.schemas.command_ms import sensor_resp as s_resp_schemas
+from app.api.schemas.inference_ms import inference as inf_schemas
+from fastapi import UploadFile, status, HTTPException
+import httpx
+import base64
+import gzip
+
+# --- Primitive functions for microservice communication ---
 
 
-def post_pop_to_gateway_api(url, pop):
-    auth_response = requests.post(
-        url=f"{url}/auth",
-        json={"pop": pop},
-        headers={"Content-Type": "application/json"},
-    )
-    if auth_response.status_code != 200:
-        raise Exception("Gateway authentication failed.")
-
-    return auth_response.json()["jwt_token"]
+async def _post_json_to_microservice(url: str, json_data: dict):
+    async with httpx.AsyncClient() as client:
+        return await client.post(url, json=json_data)
 
 
-def authenticate_to_gateway_api(session, edge_gateway):
-    auth_response = requests.post(
-        url=f"{edge_gateway.url}/auth",
-        json={"pop": edge_gateway.proof_of_possession},
-        headers={"Content-Type": "application/json"},
-    )
-    if auth_response.status_code != 200:
-        raise Exception("Gateway authentication failed.")
-
-    return crud.update_edge_gateway(
-        uuid=edge_gateway.uuid,
-        session=session,
-        fields=auth_response.json(),
-    )
+async def _put_json_to_microservice(url: str, json_data: dict):
+    async with httpx.AsyncClient() as client:
+        return await client.put(url, json=json_data)
 
 
-def jwt_token_refresh_decorator(api_call_function):
-    @wraps(api_call_function)
-    def wrapper(session, edge_gateway, *args, **kwargs):
-        response = api_call_function(session, edge_gateway, *args, **kwargs)
-        if response.status_code == 401:  # Unauthorized => JWT token expired.
-            # Re-authenticate
-            edge_gateway = authenticate_to_gateway_api(session, edge_gateway)
-            # Try the API call again with the new token
-            return api_call_function(session, edge_gateway, *args, **kwargs)
-        elif response.status_code != 200:  # Other error
-            raise Exception(
-                f"Gateway API call failed. Status code: {response.status_code}"
-            )
-        return response.json()
-
-    return wrapper
+async def _get_from_microservice(url: str):
+    async with httpx.AsyncClient() as client:
+        return await client.get(url)
 
 
-@jwt_token_refresh_decorator
-def get_from_gateway_api(session, edge_gateway, endpoint):
-    return requests.get(
-        url=f"{edge_gateway.url}{endpoint}",
-        headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},
+async def _delete_from_microservice(url: str):
+    async with httpx.AsyncClient() as client:
+        return await client.delete(url)
+
+
+# --- Data microservice functions ---
+
+
+# CRUD operations for edge gateways
+async def create_edge_gateway(data: data_schemas.CreateEdgeGateway):
+    return await _post_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway", data.model_dump()
     )
 
 
-@jwt_token_refresh_decorator
-def post_form_data_to_gateway_api(session, edge_gateway, endpoint, form_data):
-    return requests.post(
-        url=f"{edge_gateway.url}{endpoint}",
-        headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},
-        data=form_data,
+async def update_edge_gateway(data: data_schemas.UpdateEdgeGateway):
+    return await _put_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway", data.model_dump()
     )
 
 
-@jwt_token_refresh_decorator
-def post_json_to_gateway_api(session, edge_gateway, endpoint, json_data=None):
-    return requests.post(
-        url=f"{edge_gateway.url}{endpoint}",
-        headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},
-        json=json_data,
-    )
-
-@jwt_token_refresh_decorator
-def post_file_to_gateway_api(session, edge_gateway, endpoint, file, form_data=None):
-    return requests.post(
-        url=f"{edge_gateway.url}{endpoint}",
-        headers={"Authorization": f"Bearer {edge_gateway.jwt_token}"},
-        data=form_data,
-        files=file,
+async def read_edge_gateway(device_name: str):
+    return await _get_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{device_name}"
     )
 
 
-@jwt_token_refresh_decorator
-def post_command_to_gateway_api(session, edge_gateway, endpoint, command):
-    return post_json_to_gateway_api(
-        session=session,
-        edge_gateway=edge_gateway,
-        endpoint=endpoint,
-        json_data={"command": command},
+async def read_edge_gateways():
+    return await _get_from_microservice(f"{DATA_MICROSERVICE_URL}/gateway")
+
+
+async def delete_edge_gateway(device_name: str):
+    return await _delete_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{device_name}"
     )
 
 
-async def update_cloud_predictive_model(model_payload):
-    response = requests.post(
-        url=f"{ESN_PRED_NODE_URL}/predictive-model",
-        json=model_payload,
+# CRUD operations for edge sensors
+async def create_edge_sensor(gateway_name: str, data: data_schemas.CreateEdgeSensor):
+    return await _post_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor", data.model_dump()
     )
-    
-    if response.status_code != 202:
-        raise Exception(
-            f"Failed to upload predictive model to the cloud predictive node. Status code: {response.status_code}"
+
+
+async def update_edge_sensor(gateway_name: str, device_name: str, data: data_schemas.UpdateEdgeSensor):
+    return await _put_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{device_name}", data.model_dump()
+    )
+
+
+async def read_edge_sensor(gateway_name: str, device_name: str):
+    return await _get_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{device_name}"
+    )
+
+
+async def read_edge_sensors(gateway_name: str):
+    return await _get_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor"
+    )
+
+
+async def delete_edge_sensor(gateway_name: str, device_name: str):
+    return await _delete_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{device_name}"
+    )
+
+
+# CRUD operations for sensor config
+async def create_or_update_sensor_config(
+    gateway_name: str, sensor_name: str, data: data_schemas.SensorConfig
+):
+    return await _post_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/config",
+        data.model_dump(),
+    )
+
+
+async def read_sensor_config(gateway_name: str, sensor_name: str):
+    return await _get_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/config"
+    )
+
+
+async def delete_sensor_config(gateway_name: str, sensor_name: str):
+    return await _delete_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/config"
+    )
+
+
+# CRUD operations for sensor readings
+async def read_sensor_readings(gateway_name: str, sensor_name: str):
+    return await _get_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/readings"
+    )
+
+
+async def read_sensor_reading(gateway_name: str, sensor_name: str, reading_uuid: str):
+    return await _get_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/reading/{reading_uuid}"
+    )
+
+
+async def delete_sensor_readings(gateway_name: str, sensor_name: str):
+    return await _delete_from_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/readings"
+    )
+
+
+async def create_sensor_reading(
+    gateway_name: str, sensor_name: str, data: data_schemas.CreateSensorReading
+):
+    return await _post_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/reading",
+        data.model_dump(),
+    )
+
+
+# CRUD operations for prediction results
+async def create_prediction_result(
+    gateway_name: str,
+    sensor_name: str,
+    reading_uuid: str,
+    data: data_schemas.PredictionResult,
+):
+    return await _post_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/reading/{reading_uuid}/prediction",
+        data.model_dump(),
+    )
+
+
+# CRUD operations for inference latency benchmark
+async def create_inference_latency_benchmark(
+    gateway_name: str,
+    sensor_name: str,
+    reading_uuid: str,
+    data: data_schemas.InferenceLatencyBenchmark,
+):
+    return await _post_json_to_microservice(
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/reading/{reading_uuid}/inference/latency",
+        data.model_dump(),
+    )
+
+
+# --- Command microservice functions ---
+
+# Edge Gateway Commands
+
+async def get_available_sensors(
+    command: gw_cmd_schemas.GetAvailableSensors,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/gateway/command/get/available-sensors",
+        command.model_dump(),
+    )
+
+async def get_provisioned_sensors(
+    command: gw_cmd_schemas.GetProvisionedSensors,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/gateway/command/get/provisioned-sensors",
+        command.model_dump(),
+    )
+
+async def add_provisioned_sensors(
+    command: gw_cmd_schemas.AddProvisionedSensors,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/gateway/command/add/provisioned-sensors",
+        command.model_dump(),
+    )
+
+async def set_gateway_model(
+    command: gw_cmd_schemas.GatewayModelCommand,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/gateway/command/set/gateway-model",
+        command.model_dump(),
+    )
+
+async def add_registered_sensors(
+    command: gw_cmd_schemas.AddRegisteredSensors,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/gateway/command/add/registered-sensors",
+        command.model_dump(),
+    )
+
+
+# Edge Sensor Commands
+
+async def set_sensor_state(
+    command: s_cmd_schemas.SetSensorState,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/set/sensor-state",
+        command.model_dump(),
+    )
+
+async def get_sensor_state(
+    command: s_cmd_schemas.GetSensorState,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/get/sensor-state",
+        command.model_dump(),
+    )
+
+async def retrieve_sensor_state(
+    command_uuids: list[str],
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/retrieve/sensor/response/get/sensor-state",
+        command_uuids,
+    )
+
+async def set_inference_layer(
+    command: s_cmd_schemas.SetInferenceLayer,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/set/inference-layer",
+        command.model_dump(),
+    )
+
+async def get_inference_layer(
+    command: s_cmd_schemas.GetInferenceLayer,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/get/inference-layer",
+        command.model_dump(),
+    )
+
+async def retrieve_inference_layer(
+    command_uuids: list[str],
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/retrieve/sensor/response/get/inference-layer",
+        command_uuids,
+    )
+
+async def set_sensor_config(
+    command: s_cmd_schemas.SetSensorConfig,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/set/sensor-config",
+        command.model_dump(),
+    )
+
+async def get_sensor_config(
+    command: s_cmd_schemas.GetSensorConfig,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/get/sensor-config",
+        command.model_dump(),
+    )
+
+async def retrieve_sensor_config(
+    command_uuids: list[str],
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/retrieve/sensor/response/get/sensor-config",
+        command_uuids,
+    )
+
+async def set_sensor_model(
+    command: s_cmd_schemas.SetSensorModel,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/set/sensor-model",
+        command.model_dump(),
+    )
+
+async def send_inference_latency_benchmark_command(
+    command: s_cmd_schemas.InferenceLatencyBenchmarkCommand,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/sensor/command/set/inf-latency-bench",
+        command.model_dump(),
+    )
+
+# Command Response Callbacks
+
+async def store_sensor_state_response(
+    response: s_resp_schemas.SensorStateResponse,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/store/sensor/response/get/sensor-state",
+        response.model_dump(),
+    )
+
+async def store_sensor_inference_layer_response(
+    response: s_resp_schemas.InferenceLayerResponse,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/store/sensor/response/get/inference-layer",
+        response.model_dump(),
+    )
+
+async def store_sensor_config_response(
+    response: s_resp_schemas.SensorConfigResponse,
+):
+    return await _post_json_to_microservice(
+        f"{COMMAND_MICROSERVICE_URL}/store/sensor/response/get/sensor-config",
+        response.model_dump(),
+    )
+
+# --- Inference microservice functions ---
+
+async def set_cloud_model(predictive_model: inf_schemas.CloudModel):
+    return await _post_json_to_microservice(
+        f"{INFERENCE_MICROSERVICE_URL}/model/upload", predictive_model.model_dump()
+    )
+
+
+async def send_prediction_request(prediction_request: inf_schemas.PredictionRequestExport):
+    return await _put_json_to_microservice(
+        f"{INFERENCE_MICROSERVICE_URL}/model/prediction/request",
+        prediction_request.model_dump(),
+    )
+
+
+async def handle_heuristic_result(gateway_name: str, sensor_name: str, heuristic_result: int):
+    gateway_api_with_sensors = await get_gateway_api_with_sensors(gateway_name, [sensor_name])
+    if heuristic_result == HEURISTIC_ERROR_CODE:    # set sensor state to error
+        command = s_cmd_schemas.SetSensorState(
+            target=gateway_api_with_sensors,
+            resource_value=s_cmd_schemas.SensorState.ERROR
         )
+        response = await set_sensor_state(command)
+        if response.status_code != status.HTTP_202_ACCEPTED:
+            raise HTTPException(status_code=response.status_code, detail=response.json())
+    elif heuristic_result == GATEWAY_INFERENCE_LAYER:    # set sensor inference layer to gateway
+        command = s_cmd_schemas.SetInferenceLayer(
+            target=gateway_api_with_sensors,
+            resource_value=s_cmd_schemas.InferenceLayer.GATEWAY
+        )
+        response = await set_inference_layer(command)
+        if response.status_code != status.HTTP_202_ACCEPTED:
+            raise HTTPException(status_code=response.status_code, detail=response.json())
     
-    return response.json()
 
-def post_json_to_predictive_node(endpoint: str, json_data: Union[dict, list]):
-    # Sends a POST request to the predictive node
-    response = requests.post(
-        url=f"{ESN_PRED_NODE_URL}{endpoint}",
-        json=json_data,
-    )
-    if response.status_code != 200:
-        raise Exception(f"API call failed. Status code: {response.status_code}")
-    return response.json()
+# --- Gateway Comm Utility Functions ---
 
-def check_prediction(measurement, prediction, **kwargs):
-    pass
+async def get_gateway_api(gateway_name: str):
+    response = await read_edge_gateway(gateway_name)
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
+
+    gateway_url = response.json()["url"]
+    return gw_cmd_schemas.GatewayAPI(gateway_name=gateway_name, url=gateway_url)
+
+async def get_gateway_api_with_sensors(gateway_name: str, sensor_names: list[str]):
+    response = await read_edge_gateway(gateway_name)
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
+    gateway_url = response.json()["url"]
+
+    for sensor in sensor_names:
+        response = await read_edge_sensor(gateway_name, sensor)
+        if response.status_code != status.HTTP_200_OK:
+            raise HTTPException(status_code=response.status_code, detail=response.json())
+
+    return s_cmd_schemas.GatewayAPIWithSensors(gateway_name=gateway_name, url=gateway_url, target_sensors=sensor_names)
+
+
+# --- Model Utility Functions ---
+async def serialize_model_file(tf_model_file: UploadFile):
+    # Read the file content
+    file_content = await tf_model_file.read()
+
+    # Get the file byte size
+    tf_model_bytesize = len(file_content)
+
+    # Compress the file content
+    file_content = gzip.compress(file_content)
+
+    # Serialize the file content to base64
+    tf_model_b64 = base64.b64encode(file_content).decode("utf-8")
+    return {"tf_model_b64": tf_model_b64, "tf_model_bytesize": tf_model_bytesize}

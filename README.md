@@ -1,2 +1,2 @@
-# esn-app-backend
-This repository contains the backend of a web app in charge of managing an **Edge Sensor Network (ESN)**
+# esn-cloud-api
+This repository contains the implementation of the cloud API for the cloud layer of the Edge Sensor Network (ESN). 
