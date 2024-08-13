@@ -6,6 +6,7 @@ from app.core.config import (
     HEURISTIC_ERROR_CODE,
 )
 from app.api.schemas.data_ms import data as data_schemas
+from app.api.schemas.cloud_api import gateway as gw_schemas
 from app.api.schemas.command_ms import gateway_cmd as gw_cmd_schemas
 from app.api.schemas.command_ms import sensor_cmd as s_cmd_schemas
 from app.api.schemas.command_ms import sensor_resp as s_resp_schemas
@@ -14,6 +15,11 @@ from fastapi import UploadFile, status, HTTPException
 import httpx
 import base64
 import gzip
+import asyncio
+
+# --- Async Polling ---
+async def async_sleep(ms: int):
+    await asyncio.sleep(ms / 1000)
 
 # --- Primitive functions for microservice communication ---
 
@@ -168,11 +174,10 @@ async def create_prediction_result(
 async def create_inference_latency_benchmark(
     gateway_name: str,
     sensor_name: str,
-    reading_uuid: str,
     data: data_schemas.InferenceLatencyBenchmark,
 ):
     return await _post_json_to_microservice(
-        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/reading/{reading_uuid}/inference/latency",
+        f"{DATA_MICROSERVICE_URL}/gateway/{gateway_name}/sensor/{sensor_name}/inference/latency",
         data.model_dump(),
     )
 
@@ -305,12 +310,26 @@ async def set_sensor_model(
     )
 
 async def send_inference_latency_benchmark_command(
-    command: s_cmd_schemas.InferenceLatencyBenchmarkCommand,
+    sensor_data: gw_schemas.SensorDataExport,
 ):
-    return await _post_json_to_microservice(
+    gateway_name = sensor_data.metadata.gateway_name
+    sensor_name = sensor_data.metadata.sensor_name
+    send_timestamp = sensor_data.export_value.inference_descriptor.send_timestamp
+
+    command = s_cmd_schemas.InferenceLatencyBenchmarkCommand(
+        target = await get_gateway_api_with_sensors(gateway_name, [sensor_name]),
+        property_value=s_cmd_schemas.InferenceLatencyBenchmark(
+            sensor_name=sensor_name,
+            inference_layer=s_cmd_schemas.InferenceLayer.CLOUD,
+            send_timestamp=send_timestamp,
+        )
+    )
+    response = await _post_json_to_microservice(
         f"{COMMAND_MICROSERVICE_URL}/sensor/command/set/inf-latency-bench",
         command.model_dump(),
     )
+    if response.status_code != status.HTTP_202_ACCEPTED:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
 
 # Command Response Callbacks
 
@@ -352,13 +371,16 @@ async def send_prediction_request(prediction_request: inf_schemas.PredictionRequ
         prediction_request.model_dump(),
     )
 
+async def get_prediction_result(task_id: str):
+    return await _get_from_microservice(f"{INFERENCE_MICROSERVICE_URL}/model/prediction/result/{task_id}")
+
 
 async def handle_heuristic_result(gateway_name: str, sensor_name: str, heuristic_result: int):
     gateway_api_with_sensors = await get_gateway_api_with_sensors(gateway_name, [sensor_name])
     if heuristic_result == HEURISTIC_ERROR_CODE:    # set sensor state to error
         command = s_cmd_schemas.SetSensorState(
             target=gateway_api_with_sensors,
-            resource_value=s_cmd_schemas.SensorState.ERROR
+            property_value=s_cmd_schemas.SensorState.ERROR
         )
         response = await set_sensor_state(command)
         if response.status_code != status.HTTP_202_ACCEPTED:
@@ -366,7 +388,7 @@ async def handle_heuristic_result(gateway_name: str, sensor_name: str, heuristic
     elif heuristic_result == GATEWAY_INFERENCE_LAYER:    # set sensor inference layer to gateway
         command = s_cmd_schemas.SetInferenceLayer(
             target=gateway_api_with_sensors,
-            resource_value=s_cmd_schemas.InferenceLayer.GATEWAY
+            property_value=s_cmd_schemas.InferenceLayer.GATEWAY
         )
         response = await set_inference_layer(command)
         if response.status_code != status.HTTP_202_ACCEPTED:

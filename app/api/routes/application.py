@@ -98,7 +98,7 @@ async def add_provisioned_sensors(gateway_name: str, devices: list[gw_cmd_schema
     gateway_api = await utils.get_gateway_api(gateway_name)
     command = gw_cmd_schemas.AddProvisionedSensors(
         target=gateway_api,
-        resource_value=devices,
+        property_value=devices,
     )
 
     response = await utils.add_provisioned_sensors(command)
@@ -115,7 +115,7 @@ async def set_gateway_model(gateway_name: str, tf_model_file: UploadFile = File(
     gateway_api = await utils.get_gateway_api(gateway_name)
     command = gw_cmd_schemas.SetGatewayModel(
         target=gateway_api,
-        resource_value=gw_cmd_schemas.GatewayModel(**tf_model),
+        property_value=gw_cmd_schemas.GatewayModel(**tf_model),
     )
 
     response = await utils.set_gateway_model(command)
@@ -136,7 +136,7 @@ async def add_registered_sensors(gateway_name: str, sensors: list[gw_cmd_schemas
     gateway_api = await utils.get_gateway_api(gateway_name)
     command = gw_cmd_schemas.AddRegisteredSensors(
         target=gateway_api,
-        resource_value=sensors,
+        property_value=sensors,
     )
 
     response = await utils.add_registered_sensors(command)
@@ -153,7 +153,7 @@ async def set_sensor_state(gateway_name: str, sensors: list[str], state: s_cmd_s
     gateway_api_with_sensors = await utils.get_gateway_api_with_sensors(gateway_name, sensors)
     command = s_cmd_schemas.SetSensorState(
         target=gateway_api_with_sensors,
-        resource_value=state,
+        property_value=state,
     )
 
     for sensor_name in sensors:
@@ -212,7 +212,7 @@ async def set_sensor_inference_layer(gateway_name: str, sensors: list[str], laye
     gateway_api_with_sensors = await utils.get_gateway_api_with_sensors(gateway_name, sensors)
     command = s_cmd_schemas.SetInferenceLayer(
         target=gateway_api_with_sensors,
-        resource_value=layer,
+        property_value=layer,
     )
     response = await utils.set_inference_layer(command)
     if response.status_code != status.HTTP_202_ACCEPTED:
@@ -249,7 +249,7 @@ async def set_sensor_config(gateway_name: str, sensors: list[str], config: s_cmd
     gateway_api_with_sensors = await utils.get_gateway_api_with_sensors(gateway_name, sensors)
     command = s_cmd_schemas.SetSensorConfig(
         target=gateway_api_with_sensors,
-        resource_value=config,
+        property_value=config,
     )
 
     for sensor_name in sensors:
@@ -295,7 +295,7 @@ async def set_sensor_model(gateway_name: str, device_names: list[str], tf_model_
     gateway_api_with_sensors = await utils.get_gateway_api_with_sensors(gateway_name, device_names)
     command = s_cmd_schemas.SetSensorModel(
         target=gateway_api_with_sensors,
-        resource_value=s_cmd_schemas.SensorModel(
+        property_value=s_cmd_schemas.SensorModel(
             **tf_model
         ),
     )

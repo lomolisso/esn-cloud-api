@@ -90,7 +90,8 @@ class InferenceLatencyBenchmark(BaseModel):
     """
     Schema for an inference latency benchmark.
     """
-
+    sensor_name: str
+    inference_layer: InferenceLayer
     send_timestamp: int
     recv_timestamp: int
     inference_latency: int

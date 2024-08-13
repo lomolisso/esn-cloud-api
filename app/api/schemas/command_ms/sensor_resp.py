@@ -24,18 +24,18 @@ class Metadata(BaseModel):
 
 class BaseResponse(BaseModel):
     metadata: Metadata
-    resource_name: Optional[str] = None
-    resource_value: object = None
+    property_name: Optional[str] = None
+    property_value: object = None
     method: Method = Method.GET
 
 class SensorConfigResponse(BaseResponse):
-    resource_name: str = "sensor-config"
-    resource_value: SensorConfig
+    property_name: str = "sensor-config"
+    property_value: SensorConfig
 
 class InferenceLayerResponse(BaseResponse):
-    resource_name: str = "inference-layer"
-    resource_value: InferenceLayer
+    property_name: str = "inference-layer"
+    property_value: InferenceLayer
 
 class SensorStateResponse(BaseResponse):
-    resource_name: str = "sensor-state"
-    resource_value: SensorState
+    property_name: str = "sensor-state"
+    property_value: SensorState

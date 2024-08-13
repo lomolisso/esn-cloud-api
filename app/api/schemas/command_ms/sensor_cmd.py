@@ -20,10 +20,10 @@ class GatewayAPIWithSensors(BaseModel):
 class BaseCommand(BaseModel):
     method: Method
     target: GatewayAPIWithSensors
-    resource_name: Optional[str] = None
-    resource_value: object = None
+    property_name: Optional[str] = None
+    property_value: object = None
 
-# --- Resource: Sensor State ---
+# --- Property: Sensor State ---
 
 class SensorState(str, enum.Enum):
     INITIAL = "initial"
@@ -35,17 +35,17 @@ class SensorState(str, enum.Enum):
 
 
 class SensorStateCommand(BaseCommand):
-    resource_name: str = "sensor-state"
+    property_name: str = "sensor-state"
 
 class SetSensorState(SensorStateCommand):
     method: Method = Method.SET
-    resource_value: SensorState
+    property_value: SensorState
 
 class GetSensorState(SensorStateCommand):
     method: Method = Method.GET
 
 
-# --- Resource: Inference Layer ---
+# --- Property: Inference Layer ---
 
 class InferenceLayer(int, enum.Enum):
     CLOUD = 2
@@ -54,31 +54,31 @@ class InferenceLayer(int, enum.Enum):
 
 
 class InferenceLayerCommand(BaseCommand):
-    resource_name: str = "inference-layer"
+    property_name: str = "inference-layer"
 
 class SetInferenceLayer(InferenceLayerCommand):
     method: Method = Method.SET
-    resource_value: InferenceLayer
+    property_value: InferenceLayer
 
 class GetInferenceLayer(InferenceLayerCommand):
     method: Method = Method.GET
 
-# --- Resource: Sensor Config ---
+# --- Property: Sensor Config ---
 
 class SensorConfig(BaseModel):
     sleep_interval_ms: int
 
 class SensorConfigCommand(BaseCommand):
-    resource_name: str = "sensor-config"
+    property_name: str = "sensor-config"
 
 class SetSensorConfig(SensorConfigCommand):
     method: Method = Method.SET
-    resource_value: SensorConfig
+    property_value: SensorConfig
 
 class GetSensorConfig(SensorConfigCommand):
     method: Method = Method.GET
 
-# --- Resource: Sensor Model ---
+# --- Property: Sensor Model ---
 
 class SensorModel(BaseModel):
     """
@@ -90,20 +90,21 @@ class SensorModel(BaseModel):
 
 
 class SensorModelCommand(BaseCommand):
-    resource_name: str = "sensor-model"
+    property_name: str = "sensor-model"
 
 class SetSensorModel(SensorModelCommand):
     method: Method = Method.SET
-    resource_value: SensorModel
+    property_value: SensorModel
 
-# --- Resource: Inference Latency Benchmark ---
+# --- Property: Inference Latency Benchmark ---
 
 class InferenceLatencyBenchmark(BaseModel):
-    reading_uuid: str
+    sensor_name: str
+    inference_layer: InferenceLayer
     send_timestamp: int
 
 
 class InferenceLatencyBenchmarkCommand(BaseCommand):
-    resource_name: str = "inf-latency-bench"
+    property_name: str = "inf-latency-bench"
     method: Method = Method.SET
-    resource_value: InferenceLatencyBenchmark
+    property_value: InferenceLatencyBenchmark

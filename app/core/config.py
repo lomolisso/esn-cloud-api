@@ -12,6 +12,7 @@ INFERENCE_MICROSERVICE_URL: str = os.environ.get("INFERENCE_MICROSERVICE_URL")
 
 LATENCY_BENCHMARK: bool = bool(int(os.environ.get("LATENCY_BENCHMARK", "0")))
 ADAPTIVE_INFERENCE: bool = bool(int(os.environ.get("ADAPTIVE_INFERENCE", "1")))
+POLLING_INTERVAL_MS: int = int(os.environ.get("POLLING_INTERVAL_MS", "100"))
 
 CLOUD_INFERENCE_LAYER: int = 2
 GATEWAY_INFERENCE_LAYER: int = 1

@@ -1,7 +1,7 @@
+import uuid
+import enum
 from pydantic import BaseModel
 from typing import Optional
-import enum
-
 
 class Metadata(BaseModel):
     gateway_name: str
@@ -11,20 +11,15 @@ class BaseExport(BaseModel):
     metadata: Metadata
     export_value: object
 
-
-# --- Export: Sensor Reading ---
-
-class SensorReading(BaseModel):
-    uuid: str
-    values: list[list[float]]
-
-class SensorReadingExport(BaseExport):
-    export_value: SensorReading
-
 # --- Export: Inference Latency Benchmark ---
+class InferenceLayer(int, enum.Enum):
+    CLOUD = 2
+    GATEWAY = 1
+    SENSOR = 0
 
 class InferenceLatencyBenchmark(BaseModel):
-    reading_uuid: str
+    sensor_name: str
+    inference_layer: InferenceLayer
     send_timestamp: int
     recv_timestamp: int
     inference_latency: int
@@ -32,33 +27,22 @@ class InferenceLatencyBenchmark(BaseModel):
 class InferenceLatencyBenchmarkExport(BaseExport):
     export_value: InferenceLatencyBenchmark
 
-# --- Export: PredictionRequest ---
+# --- Export: SensorData ---
+class SensorReading(BaseModel):
+    uuid: str = str(uuid.uuid4())
+    values: list[list[float]]
 
-class InferenceLayer(int, enum.Enum):
-    CLOUD = 2
-    GATEWAY = 1
-    SENSOR = 0
 
 class InferenceDescriptor(BaseModel):
     inference_layer: InferenceLayer
     send_timestamp: int
+    recv_timestamp: Optional[int] = None
+    prediction: Optional[int] = None
 
-class PredictionRequest(BaseModel):
+class SensorData(BaseModel):
     reading: SensorReading
     low_battery: bool
     inference_descriptor: InferenceDescriptor
 
-class PredictionRequestExport(BaseExport):
-    export_value: PredictionRequest
-
-# --- Export: PredictionResult ---
-
-class PredictionResult(BaseModel):
-    reading_uuid: str
-    send_timestamp: int
-    inference_layer: InferenceLayer
-    prediction: int
-    heuristic_result: Optional[int] = None
-
-class PredictionResultExport(BaseExport):
-    export_value: PredictionResult
+class SensorDataExport(BaseExport):
+    export_value: SensorData
