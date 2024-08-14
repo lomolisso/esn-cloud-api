@@ -25,22 +25,22 @@ async def async_sleep(ms: int):
 
 
 async def _post_json_to_microservice(url: str, json_data: dict):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
         return await client.post(url, json=json_data)
 
 
 async def _put_json_to_microservice(url: str, json_data: dict):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
         return await client.put(url, json=json_data)
 
 
 async def _get_from_microservice(url: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
         return await client.get(url)
 
 
 async def _delete_from_microservice(url: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
         return await client.delete(url)
 
 
