@@ -105,12 +105,13 @@ async def export_sensor_data(sensor_data: gw_schemas.SensorDataExport):
     
     # Step 5: Create Inference Latency Benchmark entry in data ms if SENSOR_INFERENCE_LAYER
     if LATENCY_BENCHMARK and _inference_layer == gw_schemas.InferenceLayer.SENSOR:
+        _inference_latency = _inference_descriptor.recv_timestamp - _inference_descriptor.send_timestamp
         inf_latency_bench = data_schemas.InferenceLatencyBenchmark(
             sensor_name=sensor_name,
             inference_layer=_inference_descriptor.inference_layer,
             send_timestamp=_inference_descriptor.send_timestamp,
             recv_timestamp=_inference_descriptor.recv_timestamp,
-            inference_latency=_inference_descriptor.inference_latency
+            inference_latency=_inference_latency
         )
         response = await utils.create_inference_latency_benchmark(
             gateway_name, sensor_name, inf_latency_bench
