@@ -36,6 +36,8 @@ async def store_sensor_config_response(response: s_resp_schemas.SensorConfigResp
 
 @gateway_router.post("/export/sensor-data", status_code=status.HTTP_201_CREATED)
 async def export_sensor_data(sensor_data: gw_schemas.SensorDataExport):
+    print("Recv_timestamp is None", sensor_data.export_value.inference_descriptor.recv_timestamp is None)
+    
     # Step 1: Make sure that at least both sensor and gateway exist
     gateway_name, sensor_name = sensor_data.metadata.gateway_name, sensor_data.metadata.sensor_name
     response = await utils.read_edge_sensor(

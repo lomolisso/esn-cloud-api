@@ -92,7 +92,7 @@ class InferenceLatencyBenchmark(BaseModel):
     """
     sensor_name: str
     inference_layer: InferenceLayer
-    send_timestamp: int
+    send_timestamp: Optional[int] = None
     recv_timestamp: int
     inference_latency: int
     

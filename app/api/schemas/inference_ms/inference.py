@@ -26,7 +26,7 @@ class InferenceLayer(int, enum.Enum):
 
 class InferenceDescriptor(BaseModel):
     inference_layer: InferenceLayer
-    send_timestamp: int
+    send_timestamp: Optional[int] = None
 
 
 # --- Prediction Request ---
@@ -43,7 +43,7 @@ class PredictionRequestExport(BaseExport):
 
 class PredictionResult(BaseModel):
     reading_uuid: str
-    send_timestamp: int
+    send_timestamp: Optional[int] = None
     inference_layer: InferenceLayer
     prediction: int
     heuristic_result: Optional[int] = None
