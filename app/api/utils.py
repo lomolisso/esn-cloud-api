@@ -14,7 +14,7 @@ from app.api.schemas.inference_ms import inference as inf_schemas
 from fastapi import UploadFile, status, HTTPException
 import httpx
 import base64
-import gzip
+import zlib
 import asyncio
 
 # --- Async Polling ---
@@ -428,7 +428,7 @@ async def serialize_model_file(tf_model_file: UploadFile):
     tf_model_bytesize = len(file_content)
 
     # Compress the file content
-    file_content = gzip.compress(file_content)
+    file_content = zlib.compress(file_content)
 
     # Serialize the file content to base64
     tf_model_b64 = base64.b64encode(file_content).decode("utf-8")
