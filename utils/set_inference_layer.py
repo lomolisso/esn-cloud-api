@@ -3,10 +3,12 @@ import json
 import sys
 
 def set_layer(layer):
+    num_sensors = sys.argv[2]
+    
     # Load the device names from devices.json
     with open('../devices.json', 'r') as f:
         devices = json.load(f)
-        device_names = devices
+        device_names = devices[:int(num_sensors)]
 
     # Prepare the request
     url = f'http://localhost:8000/api/v1/sensor/command/set/inference-layer/{layer}'
